@@ -10,4 +10,5 @@ All lab-related codes and some sample implementations are available in this repo
      for k=1:length(t)  
        plotcartpend(X(k,:)); % X = [x, x_dot, theta, theta_dot]  
      end  
-6. 
+6. Pole placement and LQR implementation for inverted pendulum
+7. 
