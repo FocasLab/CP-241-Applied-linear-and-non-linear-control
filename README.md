@@ -11,4 +11,5 @@ All lab-related codes and some sample implementations are available in this repo
        plotcartpend(X(k,:)); % X = [x, x_dot, theta, theta_dot]  
      end  
 6. Pole placement and LQR implementation for inverted pendulum
-7. 
+7. Model Predictive Control
+8. 
