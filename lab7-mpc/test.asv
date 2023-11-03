@@ -1,0 +1,118 @@
+%% Control of an Inverted Pendulum on a Cart
+clc;
+clear;
+%% Model
+% Plant Model
+mdlPlant = 'mpc_pendcartPlant';
+load_system(mdlPlant)
+
+% Control Structure
+mdlMPC = 'mpc_pendcartImplicitMPC';
+open_system(mdlMPC)
+
+%% Linear Plant Model
+% Specify linearization input and output points.
+io(1) = linio([mdlPlant '/dF'],1,'openinput');
+io(2) = linio([mdlPlant '/F'],1,'openinput');
+io(3) = linio([mdlPlant '/Pendulum and Cart System'],1,'openoutput');
+io(4) = linio([mdlPlant '/Pendulum and Cart System'],3,'openoutput');
+
+% Create operating point specifications for the plant initial conditions.
+opspec = operspec(mdlPlant);
+
+% X(1) = x, x(0) = 0.
+opspec.States(1).Known = true;
+opspec.States(1).x = 0;
+
+% X(3) = theta, theta(0) = 0.
+opspec.States(3).Known = true;
+opspec.States(3).x = 0;
+
+% Compute operating point using these specifications.
+options = findopOptions('DisplayReport',false);
+op = findop(mdlPlant,opspec,options);
+
+% Obtain the linear plant model at the specified operating point.
+plant = linearize(mdlPlant,op,io);
+plant.InputName = {'dF';'F'};
+plant.OutputName = {'x';'theta'};
+
+% Examine the poles of the linearized plant.
+pole(plant)
+
+%% MPC Design
+% ud: Unmeasured disturbance 
+% mv: Measured variable
+plant = setmpcsignals(plant,'ud',1,'mv',2);
+
+%%
+Ts = 0.01;
+PredictionHorizon = 50;
+ControlHorizon = 5;
+mpcobj = mpc(plant,Ts,PredictionHorizon,ControlHorizon);
+
+mpcobj.MV.Min = -200;
+mpcobj.MV.Max = 200;
+
+mpcobj.MV.ScaleFactor = 100;
+mpcobj.Weights.MVRate = 1;
+mpcobj.Weights.OV = [1 1];
+
+%%
+% To achieve more aggressive disturbance rejection, increase the state
+% estimator gain by multiplying the default disturbance model gains by a
+% factor of |10|.
+%
+% Update the input disturbance model.
+%disturbance_model = getindist(mpcobj);
+%setindist(mpcobj,'model',disturbance_model*10);
+
+%%
+% Update the output disturbance model.
+%disturbance_model = getoutdist(mpcobj);
+%setoutdist(mpcobj,'model',disturbance_model*10);
+
+%% Closed-Loop Simulation
+% Validate the MPC design with a closed-loop simulation in Simulink.
+open_system([mdlMPC '/Scope'])
+sim(mdlMPC)
+
+%%
+% In the nonlinear simulation, all the control objectives are successfully
+% achieved.
+
+%% Discussion
+% It is important to point out that the designed MPC controller has its
+% limitations. For example, if you increase the step setpoint change to
+% |15|, the pendulum fails to recover its upright position during the
+% transition.
+%
+% To reach the longer distance within the same rise time, the controller
+% applies more force to the cart at the beginning.  As a result, the
+% pendulum is displaced from its upright position by a larger angle such as
+% |60| degrees.  At such angles, the plant dynamics differ significantly
+% from the LTI predictive model obtained at _theta_ = |0|. As a result,
+% errors in the prediction of plant behavior exceed what the built-in MPC
+% robustness can handle, and the controller fails to perform properly.
+%
+% A simple workaround to avoid the pendulum falling is to restrict pendulum
+% displacement by adding soft output constraints to _theta_ and reducing
+% the ECR weight on constraint softening.
+%
+%   mpcobj.OV(2).Min = -pi/2;
+%   mpcobj.OV(2).Max = pi/2;
+%   mpcobj.Weights.ECR = 100;
+%
+% However, with these new controller settings, it is no longer possible to
+% reach the longer distance within the required rise time. In other words,
+% controller performance is sacrificed to avoid violation of soft output
+% constraints.
+%
+% To reach longer distances within the same rise time, the controller needs
+% more accurate models at different angle to improve prediction. Another
+% example <docid:mpc_ug#bu7uk5y> shows how to use gain
+% scheduling MPC to achieve the longer distances.
+
+%%
+% Close the Simulink model.
+bdclose(mdlMPC)
